@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 
 export default function TravelPlannerApp() {
-  const [activeTab, setActiveTab] = useState('timeline'); // timeline | wishlist | restaurants
+  const [activeTab, setActiveTab] = useState('timeline');
   const [selectedDay, setSelectedDay] = useState(1);
   const [shareCopied, setShareCopied] = useState(false);
   const [activeRouteModal, setActiveRouteModal] = useState(null);
@@ -25,10 +25,6 @@ export default function TravelPlannerApp() {
     3: []
   };
 
-  const initialWishlist = [
-    { id: 101, name: '타이파 빌리지', category: '관광지', lat: 22.1508814, lng: 113.5551418, note: '먹거리 & 에그타르트 골목' }
-  ];
-
   const macauRestaurants = [
     { id: 1, name: '신무이 굴국수 (타이파)', category: '면요리', nearLocation: '타이파 빌리지', lat: 22.1512, lng: 113.5560, krRating: 4.8, note: '향신료 없음 / 담백한 국물 / 한국인 필수 해장 맛집' },
     { id: 2, name: '북방관 (North - 베네시안)', category: '중식', nearLocation: '베네시안 리조트 마카오', lat: 22.1485, lng: 113.5605, krRating: 4.7, note: '바삭 달콤 가지튀김 & 꿔바로우 강추' },
@@ -36,24 +32,26 @@ export default function TravelPlannerApp() {
   ];
 
   const [itinerary, setItinerary] = useState(() => {
-    const saved = localStorage.getItem('macau_itinerary');
-    return saved ? JSON.parse(saved) : initialItinerary;
-  });
-
-  const [wishlist, setWishlist] = useState(() => {
-    const saved = localStorage.getItem('macau_wishlist');
-    return saved ? JSON.parse(saved) : initialWishlist;
+    try {
+      const saved = localStorage.getItem('macau_itinerary');
+      return saved ? JSON.parse(saved) : initialItinerary;
+    } catch (e) {
+      return initialItinerary;
+    }
   });
 
   const [newSingle, setNewSingle] = useState({ name: '', time: '12:00', lat: '', lng: '' });
 
   useEffect(() => {
-    localStorage.setItem('macau_itinerary', JSON.stringify(itinerary));
-    localStorage.setItem('macau_wishlist', JSON.stringify(wishlist));
-    setSaveStatus('자동 저장 완료');
-    const timer = setTimeout(() => setSaveStatus('자동 저장됨'), 1500);
-    return () => clearTimeout(timer);
-  }, [itinerary, wishlist]);
+    try {
+      localStorage.setItem('macau_itinerary', JSON.stringify(itinerary));
+      setSaveStatus('자동 저장 완료');
+      const timer = setTimeout(() => setSaveStatus('자동 저장됨'), 1500);
+      return () => clearTimeout(timer);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [itinerary]);
 
   // 📋 여러 장소 텍스트 일괄 파싱 & 추가 함수
   const handleBulkImport = () => {
@@ -63,35 +61,39 @@ export default function TravelPlannerApp() {
 
     lines.forEach((line) => {
       const clean = line.trim();
-      // "장소명 [탭/공백/쉼표] 위도, 경도" 형식 매칭
-      const match = clean.match(/^(.*?)[,\t\s]+(-?\d+\.\d+)[,\t\s]+(-?\d+\.\d+)$/);
-      
-      if (match) {
-        parsedPlaces.push({
-          id: Date.now() + Math.random(),
-          time: '12:00',
-          name: match[1].trim(),
-          category: '관광지',
-          lat: parseFloat(match[2]),
-          lng: parseFloat(match[3]),
-          nextDistanceKm: 1.0,
-          nextRouteInfo: { method: '도보', duration: '10분', details: '인근 이동 경로' }
-        });
+      const coordMatch = clean.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)$/);
+      if (coordMatch) {
+        const lat = parseFloat(coordMatch[1]);
+        const lng = parseFloat(coordMatch[2]);
+        let name = clean.substring(0, coordMatch.index).trim();
+        if (name) {
+          parsedPlaces.push({
+            id: Date.now() + Math.random(),
+            time: '12:00',
+            name: name,
+            category: '관광지',
+            lat: lat,
+            lng: lng,
+            nextDistanceKm: 1.0,
+            nextRouteInfo: { method: '도보', duration: '10분', details: '인근 이동 경로' }
+          });
+        }
       } else {
-        // 탭 구분자 서브 파싱
-        const parts = clean.split('\t').map(s => s.trim()).filter(Boolean);
-        if (parts.length >= 2) {
-          const coords = parts[1].split(',').map(s => s.trim());
-          if (coords.length >= 2) {
+        const parts = clean.split(/[\t,]+/).map(s => s.trim()).filter(Boolean);
+        if (parts.length >= 3) {
+          const name = parts[0];
+          const lat = parseFloat(parts[1]);
+          const lng = parseFloat(parts[2]);
+          if (name && !isNaN(lat) && !isNaN(lng)) {
             parsedPlaces.push({
               id: Date.now() + Math.random(),
               time: '12:00',
-              name: parts[0],
+              name: name,
               category: '관광지',
-              lat: parseFloat(coords[0]) || 0,
-              lng: parseFloat(coords[1]) || 0,
+              lat: lat,
+              lng: lng,
               nextDistanceKm: 1.0,
-              nextRouteInfo: { method: '도보', duration: '10분', details: '인근 이동' }
+              nextRouteInfo: { method: '도보', duration: '10분', details: '인근 이동 경로' }
             });
           }
         }
@@ -99,15 +101,15 @@ export default function TravelPlannerApp() {
     });
 
     if (parsedPlaces.length > 0) {
-      setItinerary({
-        ...itinerary,
-        [selectedDay]: [...(itinerary[selectedDay] || []), ...parsedPlaces]
-      });
+      setItinerary(prev => ({
+        ...prev,
+        [selectedDay]: [...(prev[selectedDay] || []), ...parsedPlaces]
+      }));
       setBulkText('');
       setShowBulkModal(false);
       alert(`🎉 총 ${parsedPlaces.length}개 장소가 Day ${selectedDay}에 일괄 추가되었습니다!`);
     } else {
-      alert('형식을 확인해 주세요!\n예시: 세나도 광장 22.1935334, 113.5397593');
+      alert('형식을 확인해 주세요!\n예시:\n세나도 광장 22.1935334, 113.5397593\n성 바울 성당 유적 22.1974561, 113.5408647');
     }
   };
 
@@ -126,24 +128,28 @@ export default function TravelPlannerApp() {
       nextRouteInfo: { method: '도보', duration: '8분', details: '이동 경로' }
     };
 
-    setItinerary({
-      ...itinerary,
-      [selectedDay]: [...(itinerary[selectedDay] || []), newItem]
-    });
+    setItinerary(prev => ({
+      ...prev,
+      [selectedDay]: [...(prev[selectedDay] || []), newItem]
+    }));
     setNewSingle({ name: '', time: '12:00', lat: '', lng: '' });
   };
 
   const handleDelete = (day, id) => {
-    setItinerary({
-      ...itinerary,
-      [day]: itinerary[day].filter(item => item.id !== id)
-    });
+    setItinerary(prev => ({
+      ...prev,
+      [day]: (prev[day] || []).filter(item => item.id !== id)
+    }));
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setShareCopied(true);
-    setTimeout(() => setShareCopied(false), 2000);
+    try {
+      navigator.clipboard.writeText(window.location.href);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch (e) {
+      alert('주소 복사 기능은 실제 웹사이트에서 작동합니다.');
+    }
   };
 
   const currentPlaces = itinerary[selectedDay] || [];
@@ -351,7 +357,7 @@ export default function TravelPlannerApp() {
 
             <textarea 
               rows={6}
-              placeholder={`세나도 광장\t22.1935334, 113.5397593\n성 바울 성당 유적\t22.1974561, 113.5408647\n베네시안 리조트 마카오\t22.1484129, 113.5602018`}
+              placeholder={`세나도 광장 22.1935334, 113.5397593\n성 바울 성당 유적 22.1974561, 113.5408647\n베네시안 리조트 마카오 22.1484129, 113.5602018`}
               value={bulkText}
               onChange={e => setBulkText(e.target.value)}
               className="w-full p-3 border border-slate-200 rounded-2xl outline-none focus:border-indigo-500 font-mono text-xs leading-relaxed"
