@@ -13,6 +13,8 @@ export default function TravelPlannerApp() {
   const [bulkText, setBulkText] = useState('');
   const [saveStatus, setSaveStatus] = useState('자동 저장됨');
 
+  const daysList = [1, 2, 3]; // 일차 리스트
+
   // 마카오 기본 샘플 데이터
   const initialItinerary = {
     1: [
@@ -184,7 +186,7 @@ export default function TravelPlannerApp() {
 
         {/* Day 탭 */}
         <div className="flex gap-2 mt-3 overflow-x-auto pb-1 text-xs">
-          {[1, 2, 3].map(day => (
+          {daysList.map(day => (
             <button
               key={day}
               onClick={() => setSelectedDay(day)}
